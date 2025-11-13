@@ -3,10 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Karo AR - Google Model Viewer</title>
+    <title>Karo AR - Grid Görüntüleyici</title>
     
-    <!-- Google Model Viewer -->
-    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- GLTFLoader -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     
     <style>
         * {
@@ -17,256 +20,470 @@
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
+            overflow: hidden;
+            background: #000;
         }
         
-        .container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            padding: 30px;
-            max-width: 500px;
+        #ar-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        
+        #canvas-container {
             width: 100%;
+            height: 100%;
         }
         
-        h1 {
-            text-align: center;
-            color: #333;
-            margin-bottom: 10px;
-            font-size: 28px;
+        #ui-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 1000;
+            pointer-events: none;
         }
         
-        .subtitle {
-            text-align: center;
-            color: #666;
-            margin-bottom: 25px;
-            font-size: 14px;
-        }
-        
-        .dimensions {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        .control-panel {
+            background: linear-gradient(180deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.7) 100%);
             color: white;
-            padding: 15px;
-            border-radius: 12px;
-            text-align: center;
-            margin-bottom: 25px;
-            font-weight: 600;
+            padding: 20px;
+            pointer-events: all;
         }
         
-        model-viewer {
-            width: 100%;
-            height: 400px;
-            background-color: #f5f5f5;
-            border-radius: 12px;
-            margin-bottom: 20px;
+        .control-panel h2 {
+            font-size: 20px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         
-        .ar-button {
+        .status-box {
+            background: rgba(255,255,255,0.15);
+            padding: 12px 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            font-size: 14px;
+            border-left: 4px solid #4CAF50;
+        }
+        
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        button {
             background: linear-gradient(135deg, #4CAF50, #45a049);
             color: white;
             border: none;
-            padding: 18px;
-            width: 100%;
-            border-radius: 12px;
-            font-size: 18px;
-            font-weight: bold;
+            padding: 15px 20px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
             cursor: pointer;
             transition: all 0.3s;
-            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
-            margin-bottom: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
         }
         
-        .ar-button:active {
-            transform: scale(0.98);
+        button:active {
+            transform: scale(0.95);
         }
         
-        .ar-button.secondary {
+        button.danger {
+            background: linear-gradient(135deg, #f44336, #d32f2f);
+        }
+        
+        button.primary {
             background: linear-gradient(135deg, #2196F3, #1976D2);
-            box-shadow: 0 4px 15px rgba(33, 150, 243, 0.3);
         }
         
-        .info-box {
-            background: #f0f7ff;
-            border-left: 4px solid #2196F3;
-            padding: 15px;
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        
+        #placement-guide {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #2196F3, #1976D2);
+            color: white;
+            padding: 20px 35px;
+            border-radius: 25px;
+            font-size: 18px;
+            font-weight: 600;
+            box-shadow: 0 8px 30px rgba(33, 150, 243, 0.5);
+            display: none;
+            animation: pulse 2s infinite;
+            pointer-events: none;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: translateX(-50%) scale(1); }
+            50% { transform: translateX(-50%) scale(1.05); }
+        }
+        
+        .corner-marker {
+            width: 40px;
+            height: 40px;
+            background: #FF0000;
+            border: 3px solid white;
+            border-radius: 50%;
+            position: absolute;
+            transform: translate(-50%, -50%);
+            z-index: 100;
+            box-shadow: 0 4px 15px rgba(255, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        
+        #start-button {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            border: none;
+            padding: 25px 50px;
+            border-radius: 15px;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            z-index: 2000;
+        }
+        
+        .info-badge {
+            background: rgba(255, 193, 7, 0.3);
+            border: 2px solid #FFC107;
+            color: #FFF;
+            padding: 8px 12px;
             border-radius: 8px;
-            margin-top: 20px;
-        }
-        
-        .info-box h3 {
-            color: #1976D2;
-            font-size: 16px;
-            margin-bottom: 8px;
-        }
-        
-        .info-box p {
-            color: #555;
-            font-size: 14px;
-            line-height: 1.6;
-        }
-        
-        .instructions {
-            background: #fff3cd;
-            border-left: 4px solid #ffc107;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        
-        .instructions ul {
-            margin: 10px 0 0 20px;
-            color: #856404;
-        }
-        
-        .instructions li {
-            margin: 5px 0;
-            font-size: 14px;
-        }
-        
-        @media (max-width: 480px) {
-            .container {
-                padding: 20px;
-            }
-            
-            h1 {
-                font-size: 24px;
-            }
-            
-            model-viewer {
-                height: 300px;
-            }
+            font-size: 12px;
+            margin-top: 10px;
+            text-align: center;
         }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h1>🏠 Karo AR Görüntüleyici</h1>
-        <p class="subtitle">Google Model Viewer ile desteklenmektedir</p>
+    <!-- Başlat Butonu -->
+    <button id="start-button" onclick="startAR()">
+        📱 AR'ı Başlat
+    </button>
+
+    <!-- AR Container -->
+    <div id="ar-container" style="display: none;">
+        <div id="canvas-container"></div>
         
-        <div class="dimensions">
-            📏 Karo Boyutu: 25mm × 150mm × 349mm
-        </div>
-        
-        <div class="instructions">
-            <strong>📱 Nasıl Kullanılır:</strong>
-            <ul>
-                <li>Aşağıdaki "AR'da Görüntüle" butonuna tıklayın</li>
-                <li>Kamera izni verin</li>
-                <li>Telefonunuzu yere/duvara tutun</li>
-                <li>Karoyu yerleştirmek için dokunun</li>
-            </ul>
-        </div>
-        
-        <!-- 3D Model Viewer -->
-        <model-viewer
-            id="karo-viewer"
-            src="models/karo.glb"
-            ar
-            ar-modes="webxr scene-viewer quick-look"
-            camera-controls
-            touch-action="pan-y"
-            auto-rotate
-            shadow-intensity="1"
-            exposure="1"
-            alt="Duvar Karosu 3D Model">
-            
-            <!-- AR buton (otomatik) -->
-            <button slot="ar-button" class="ar-button">
-                📱 AR'da Görüntüle
-            </button>
-            
-            <!-- Yükleme göstergesi -->
-            <div id="lazy-load-poster" slot="poster">
-                <div style="display: flex; align-items: center; justify-content: center; height: 100%;">
-                    <p>Model yükleniyor...</p>
+        <!-- UI Overlay -->
+        <div id="ui-overlay">
+            <div class="control-panel">
+                <h2>🏠 Karo AR - Grid Modu</h2>
+                
+                <div class="status-box" id="status">
+                    Hazırlanıyor...
+                </div>
+                
+                <div class="info-badge">
+                    📏 Karo: 25mm × 150mm × 349mm
+                </div>
+                
+                <div class="button-group">
+                    <button class="primary" onclick="startAreaSelection()" id="area-btn">
+                        📐 Alan Seç
+                    </button>
+                    <button class="danger" onclick="clearTiles()" id="clear-btn">
+                        🗑️ Temizle
+                    </button>
                 </div>
             </div>
-        </model-viewer>
-        
-        <!-- Grid Modu Butonu (Gelecek özellik) -->
-        <button class="ar-button secondary" onclick="alert('Grid modu yakında eklenecek! Şu an tek karo görüntüleyebilirsiniz.')">
-            ⊞ Grid Modu (Yakında)
-        </button>
-        
-        <div class="info-box">
-            <h3>💡 Bilgi</h3>
-            <p>
-                <strong>iOS:</strong> Safari tarayıcısı gereklidir (Quick Look)<br>
-                <strong>Android:</strong> Chrome ve ARCore desteği gereklidir<br>
-                <strong>Model:</strong> Gerçek boyutlarda görüntülenir
-            </p>
+        </div>
+
+        <!-- Yerleştirme Rehberi -->
+        <div id="placement-guide">
+            🎯 Köşeleri işaretleyin: <span id="corner-count">0</span>/4
         </div>
     </div>
-    
+
     <script>
-        const modelViewer = document.querySelector('#karo-viewer');
+        // Karo boyutları (metre)
+        const TILE_WIDTH = 0.025;
+        const TILE_HEIGHT = 0.34914;
+        const TILE_DEPTH = 0.150;
         
-        // Model yüklendiğinde
-        modelViewer.addEventListener('load', () => {
-            console.log('✅ Model başarıyla yüklendi!');
-        });
+        // Three.js değişkenleri
+        let scene, camera, renderer, reticle;
+        let hitTestSource = null;
+        let hitTestSourceRequested = false;
+        let tiles = [];
+        let corners = [];
+        let isAreaSelectionMode = false;
+        let karoModel = null;
         
-        // AR açıldığında
-        modelViewer.addEventListener('ar-status', (event) => {
-            if (event.detail.status === 'session-started') {
-                console.log('🎉 AR modu başlatıldı!');
+        // AR başlat
+        async function startAR() {
+            document.getElementById('start-button').style.display = 'none';
+            document.getElementById('ar-container').style.display = 'block';
+            
+            // WebXR destekli mi kontrol
+            if (!navigator.xr) {
+                alert('Bu cihaz WebXR desteklemiyor. Lütfen uyumlu bir cihaz kullanın.');
+                return;
             }
-        });
+            
+            // AR destekli mi kontrol
+            const supported = await navigator.xr.isSessionSupported('immersive-ar');
+            if (!supported) {
+                alert('Bu cihaz AR desteklemiyor.');
+                return;
+            }
+            
+            initThreeJS();
+            loadModel();
+        }
         
-        // Hata durumunda
-        modelViewer.addEventListener('error', (event) => {
-            console.error('❌ Model yükleme hatası:', event);
-            alert('Model yüklenirken bir hata oluştu. Lütfen sayfayı yenileyin.');
+        // Three.js başlat
+        function initThreeJS() {
+            const container = document.getElementById('canvas-container');
+            
+            // Scene
+            scene = new THREE.Scene();
+            
+            // Camera
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+            
+            // Işıklar
+            const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+            light.position.set(0.5, 1, 0.25);
+            scene.add(light);
+            
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ 
+                antialias: true, 
+                alpha: true 
+            });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.xr.enabled = true;
+            container.appendChild(renderer.domElement);
+            
+            // Reticle (hedef göstergesi)
+            reticle = new THREE.Mesh(
+                new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
+                new THREE.MeshBasicMaterial()
+            );
+            reticle.matrixAutoUpdate = false;
+            reticle.visible = false;
+            scene.add(reticle);
+            
+            // AR session başlat
+            startARSession();
+            
+            updateStatus('✅ AR sistemi hazır! Yüzeye bakın.');
+        }
+        
+        // AR session başlat
+        async function startARSession() {
+            const sessionInit = {
+                requiredFeatures: ['hit-test'],
+                optionalFeatures: ['dom-overlay'],
+                domOverlay: { root: document.getElementById('ui-overlay') }
+            };
+            
+            const session = await navigator.xr.requestSession('immersive-ar', sessionInit);
+            renderer.xr.setSession(session);
+            
+            session.addEventListener('select', onSelect);
+            
+            session.requestReferenceSpace('viewer').then((referenceSpace) => {
+                session.requestHitTestSource({ space: referenceSpace }).then((source) => {
+                    hitTestSource = source;
+                });
+            });
+            
+            renderer.setAnimationLoop(render);
+        }
+        
+        // Model yükle
+        function loadModel() {
+            const loader = new THREE.GLTFLoader();
+            loader.load(
+                'models/karo.glb',
+                (gltf) => {
+                    karoModel = gltf.scene;
+                    karoModel.scale.set(1, 1, 1);
+                    console.log('✅ Karo modeli yüklendi!');
+                    updateStatus('✅ Model yüklendi! Karo yerleştirmeye hazır.');
+                },
+                undefined,
+                (error) => {
+                    console.error('❌ Model yükleme hatası:', error);
+                    updateStatus('❌ Model yüklenemedi. Sayfayı yenileyin.');
+                }
+            );
+        }
+        
+        // Tıklama eventi
+        function onSelect() {
+            if (!karoModel) {
+                updateStatus('⏳ Model henüz yüklenmiyor...');
+                return;
+            }
+            
+            if (reticle.visible) {
+                if (isAreaSelectionMode) {
+                    addCorner();
+                } else {
+                    placeSingleTile();
+                }
+            }
+        }
+        
+        // Tek karo yerleştir
+        function placeSingleTile() {
+            const tile = karoModel.clone();
+            tile.position.setFromMatrixPosition(reticle.matrix);
+            scene.add(tile);
+            tiles.push(tile);
+            updateStatus(`✅ Karo yerleştirildi! Toplam: ${tiles.length}`);
+        }
+        
+        // Alan seçim modu başlat
+        function startAreaSelection() {
+            isAreaSelectionMode = true;
+            corners = [];
+            document.getElementById('placement-guide').style.display = 'block';
+            document.getElementById('corner-count').textContent = '0';
+            updateStatus('🎯 Alanın 4 köşesini işaretleyin');
+        }
+        
+        // Köşe ekle
+        function addCorner() {
+            const position = new THREE.Vector3();
+            position.setFromMatrixPosition(reticle.matrix);
+            corners.push(position);
+            
+            // Görsel işaretleyici
+            const marker = new THREE.Mesh(
+                new THREE.SphereGeometry(0.05),
+                new THREE.MeshBasicMaterial({ color: 0xff0000 })
+            );
+            marker.position.copy(position);
+            scene.add(marker);
+            tiles.push(marker);
+            
+            document.getElementById('corner-count').textContent = corners.length;
+            
+            if (corners.length === 4) {
+                fillArea();
+                isAreaSelectionMode = false;
+                document.getElementById('placement-guide').style.display = 'none';
+            } else {
+                updateStatus(`Köşe ${corners.length}/4 işaretlendi`);
+            }
+        }
+        
+        // Alanı karo ile doldur
+        function fillArea() {
+            if (!karoModel || corners.length !== 4) return;
+            
+            updateStatus('⏳ Karolar yerleştiriliyor...');
+            
+            // Basitleştirilmiş grid
+            const minX = Math.min(...corners.map(c => c.x));
+            const maxX = Math.max(...corners.map(c => c.x));
+            const minZ = Math.min(...corners.map(c => c.z));
+            const maxZ = Math.max(...corners.map(c => c.z));
+            const avgY = corners.reduce((sum, c) => sum + c.y, 0) / 4;
+            
+            const rows = Math.ceil((maxZ - minZ) / TILE_DEPTH);
+            const cols = Math.ceil((maxX - minX) / TILE_WIDTH);
+            
+            let count = 0;
+            
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    const tile = karoModel.clone();
+                    tile.position.set(
+                        minX + (col * TILE_WIDTH) + (TILE_WIDTH / 2),
+                        avgY,
+                        minZ + (row * TILE_DEPTH) + (TILE_DEPTH / 2)
+                    );
+                    scene.add(tile);
+                    tiles.push(tile);
+                    count++;
+                }
+            }
+            
+            updateStatus(`✅ ${count} karo yerleştirildi! (${rows}×${cols} grid)`);
+            corners = [];
+        }
+        
+        // Temizle
+        function clearTiles() {
+            tiles.forEach(tile => scene.remove(tile));
+            tiles = [];
+            corners = [];
+            isAreaSelectionMode = false;
+            document.getElementById('placement-guide').style.display = 'none';
+            updateStatus('🗑️ Tüm karolar temizlendi');
+        }
+        
+        // Render loop
+        function render(timestamp, frame) {
+            if (frame) {
+                const referenceSpace = renderer.xr.getReferenceSpace();
+                const session = renderer.xr.getSession();
+                
+                if (hitTestSourceRequested === false) {
+                    session.requestReferenceSpace('viewer').then((referenceSpace) => {
+                        session.requestHitTestSource({ space: referenceSpace }).then((source) => {
+                            hitTestSource = source;
+                        });
+                    });
+                    hitTestSourceRequested = true;
+                }
+                
+                if (hitTestSource) {
+                    const hitTestResults = frame.getHitTestResults(hitTestSource);
+                    
+                    if (hitTestResults.length) {
+                        const hit = hitTestResults[0];
+                        reticle.visible = true;
+                        reticle.matrix.fromArray(hit.getPose(referenceSpace).transform.matrix);
+                    } else {
+                        reticle.visible = false;
+                    }
+                }
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Durum güncelle
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+            console.log('Status:', message);
+        }
+        
+        // Pencere yeniden boyutlandırma
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
         });
     </script>
 
 </body>
 </html>
-```
-
----
-
-## 🔄 **Dosyayı Nasıl Güncellersiniz?**
-
-### Yöntem 1: GitHub Web (Kolay)
-
-1. GitHub'da `karo-ar` repository'ye gidin
-2. `index.html` dosyasına tıklayın
-3. Sağ üstte **✏️ kalem ikonu** (Edit) tıklayın
-4. Tüm içeriği silin
-5. Yukarıdaki yeni kodu yapıştırın
-6. Aşağıda **Commit changes** (yeşil buton)
-
-### Yöntem 2: Yeni Dosya Yükle
-
-1. Bilgisayarınızda yeni `index.html` oluşturun (yukarıdaki kod ile)
-2. GitHub'da eski `index.html` silin (yanındaki 🗑️)
-3. **Add file** → **Upload files**
-4. Yeni dosyayı yükleyin
-
----
-
-## 📝 **script.js'yi Silin (Artık Gerek Yok)**
-
-Google Model Viewer çok daha basit, ayrı JavaScript dosyası gerektirmiyor!
-
-1. GitHub'da `script.js` dosyasına tıklayın
-2. Sağ üstte 🗑️ (Delete file)
-3. **Commit changes**
-
----
-
-## ✅ **Yapılacaklar Listesi:**
-```
-1. ✅ index.html'i güncelle (yukarıdaki kod)
-2. ✅ script.js'yi sil (artık gereksiz)
-3. ⏸️ models/karo.glb'yi koru (aynı model)
-4. ⏱️ 2-3 dakika bekle (GitHub Pages güncellensin)
-5. 📱 Test et!
