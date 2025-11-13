@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Karo AR - 25x150x349mm</title>
+    
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        
+        #ui-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        
+        .control-panel {
+            background: linear-gradient(135deg, rgba(0,0,0,0.9), rgba(0,0,0,0.7));
+            color: white;
+            padding: 15px;
+            border-radius: 0 0 15px 15px;
+            pointer-events: all;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        
+        .control-panel h3 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .info {
+            background: rgba(255,255,255,0.95);
+            color: #333;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            border-left: 4px solid #4CAF50;
+        }
+        
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            flex: 1;
+            min-width: 120px;
+        }
+        
+        button:active {
+            transform: scale(0.95);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+        }
+        
+        button.secondary {
+            background: linear-gradient(135deg, #2196F3, #1976D2);
+        }
+        
+        button.danger {
+            background: linear-gradient(135deg, #f44336, #d32f2f);
+        }
+        
+        #placement-mode {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #2196F3, #1976D2);
+            color: white;
+            padding: 18px 35px;
+            border-radius: 30px;
+            font-size: 18px;
+            font-weight: 600;
+            display: none;
+            pointer-events: all;
+            box-shadow: 0 6px 25px rgba(33, 150, 243, 0.4);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: translateX(-50%) scale(1); }
+            50% { transform: translateX(-50%) scale(1.05); }
+        }
+        
+        .dimensions {
+            background: rgba(255, 193, 7, 0.2);
+            border: 2px solid #FFC107;
+            color: #333;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            margin-top: 8px;
+            text-align: center;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- UI Overlay -->
+    <div id="ui-overlay">
+        <div class="control-panel">
+            <h3>🏠 Karo AR Görüntüleyici</h3>
+            
+            <div class="dimensions">
+                📏 Karo Boyutu: 25mm x 150mm x 349mm
+            </div>
+            
+            <div class="info" id="status">
+                📱 Yüzeye dokunarak karo yerleştirin
+            </div>
+            
+            <div class="button-group">
+                <button onclick="placeSingleTile()" class="secondary">
+                    ➕ Tek Karo
+                </button>
+                <button onclick="startPlacement()">
+                    📐 Alan Seç
+                </button>
+                <button onclick="toggleOrientation()" class="secondary">
+                    🔄 Döndür
+                </button>
+                <button onclick="clearTiles()" class="danger">
+                    🗑️ Temizle
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="placement-mode">
+        🎯 Köşeleri işaretleyin: <span id="corner-count">0</span>/4
+    </div>
+
+    <!-- AR Scene -->
+    <a-scene
+        embedded
+        arjs="sourceType: webcam; 
+              debugUIEnabled: false; 
+              detectionMode: mono_and_matrix; 
+              matrixCodeType: 3x3;"
+        vr-mode-ui="enabled: false"
+        gesture-detector
+        id="ar-scene">
+        
+        <!-- Karo Asset'i -->
+        <a-assets>
+            <a-asset-item 
+                id="karo-model" 
+                src="models/karo.glb">
+            </a-asset-item>
+        </a-assets>
+
+        <!-- Işıklandırma -->
+        <a-entity light="type: ambient; color: #FFF; intensity: 0.9"></a-entity>
+        <a-entity light="type: directional; color: #FFF; intensity: 0.6" position="2 4 2"></a-entity>
+        <a-entity light="type: point; color: #FFF; intensity: 0.5" position="0 3 0"></a-entity>
+
+        <!-- Karo Container -->
+        <a-entity id="tile-container"></a-entity>
+
+        <!-- Kamera -->
+        <a-entity camera look-controls="enabled: false"></a-entity>
+        
+    </a-scene>
+
+    <script src="script.js"></script>
+
+</body>
+</html>
